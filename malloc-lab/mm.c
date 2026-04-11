@@ -57,7 +57,7 @@ int mm_init(void)
 void *mm_malloc(size_t size)
 {
     int newsize = ALIGN(size + SIZE_T_SIZE);
-    void *p = mem_sbrk(newsize);
+    void *p = mem_sbrk(newsize);    //brk 증가 sbrk함수
     if (p == (void *)-1)
         return NULL;
     else
