@@ -99,7 +99,12 @@ int mm_init(void)
 }
 static void *extend_heap(size_t words)
 {
-    char *bp;
+    //블록 포인터, 페이로드의 첫번째 바이트를 가리킴. 블록 조작, 순회의 기준점.
+    char *bp;   
+    //크기 size_t는 해당 시스템에서 최대크기의 데이터를 표현하는 타입(stdio.h에 정의)
+    size_t size;
+
+    
 }
 /*
  * mm_malloc - Allocate a block by incrementing the brk pointer.
