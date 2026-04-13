@@ -220,17 +220,17 @@ void *mm_malloc(size_t size)
 }
 
     
-// static void *find_fit(size_t asize)//codex로 생성
-// {
-//     void *bp;
+static void *find_fit(size_t asize)//codex로 생성
+{
+    void *bp;
 
-//     for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-//         if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
-//             return bp;
-//     }
+    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
+            return bp;
+    }
 
-//     return NULL;
-// }
+    return NULL;
+}
 //해당 free 블록 위치에 할당하기
 static void place(void *bp, size_t asize)   //codex로 생성
 {
@@ -257,7 +257,27 @@ void *mm_realloc(void *bp, size_t size)
 {
     void *oldptr = bp;
     void *newptr;
-    size_t copySize = GET_SIZE(HDRP(oldptr)) - DSIZE;
+    size_t oldSize;
+    size_t asize;
+    size_t copySize;
+    size_t nextSize;
+    size_t totalSize;
+
+    if (bp == NULL)
+        return mm_malloc(size);
+
+    if (size == 0) {
+        mm_free(bp);
+        return NULL;
+    }
+
+    oldSize = GET_SIZE(HDRP(oldptr));
+    if(size <= DSIZE)
+        asize = 2 * DSIZE;
+    else
+        asize = DSIZE * ((size + DSIZE + (DSIZE - 1)) / DSIZE);
+    copySize = oldSize - DSIZE;
+    
 
     //헤더, 풋터 제외하고 데이터 만큼만 기존 크기 가져옴
     //copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
@@ -265,8 +285,22 @@ void *mm_realloc(void *bp, size_t size)
 
     void *nextbp = NEXT_BLKP(oldptr);
     //만약 다음 블록이 free이고 블록 크기가 충분하다면
-    if (copySize + size <= GET_SIZE(HDRP(nextbp)) - WSIZE && !GET_ALLOC(HDRP(nextbp))){
-        
+    nextSize = GET_SIZE(HDRP(nextbp));
+    totalSize = oldSize + nextSize;
+    if (asize <= totalSize && !GET_ALLOC(HDRP(nextbp))){
+        //필요한 만큼만 확장하고 남는 공간은 free 블록으로 유지한다.
+        if ((totalSize - asize) >= (2 * DSIZE)) {
+            PUT(HDRP(bp), PACK(asize, 1));
+            PUT(FTRP(bp), PACK(asize, 1));
+            nextbp = NEXT_BLKP(bp);
+            PUT(HDRP(nextbp), PACK(totalSize - asize, 0));
+            PUT(FTRP(nextbp), PACK(totalSize - asize, 0));
+        }
+        else {
+            PUT(HDRP(bp), PACK(totalSize, 1));
+            PUT(FTRP(bp), PACK(totalSize, 1));
+        }
+        return oldptr;
     }
     //그렇지 않을 경우
     newptr = mm_malloc(size);   //사이즈만큼 할당
