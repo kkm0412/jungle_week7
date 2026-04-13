@@ -87,7 +87,7 @@ static void place(void *bp, size_t asize);
 /*
  * mm_init - initialize the malloc package.
  */
-int mm_init(void)
+int mm_init(void)   //힙 초기화 하는 함수
 {
     //비어있는 힙 생성
     if ((heap_listp = mem_sbrk(4 *WSIZE)) == (void *)-1)
@@ -105,7 +105,7 @@ int mm_init(void)
         return -1;
     return 0;
 }
-static void *extend_heap(size_t words)
+static void *extend_heap(size_t words)  //힙 자체를 확장하는 함수
 {
     //블록 포인터, 페이로드의 첫번째 바이트를 가리킴. 블록 조작, 순회의 기준점.
     char *bp;   
@@ -129,7 +129,8 @@ static void *extend_heap(size_t words)
 /*
  * mm_free - Freeing a block does nothing.
  */
-void mm_free(void *bp)
+//가리키는 블록을 free시키는 함수
+void mm_free(void *bp)  
 {
     size_t size = GET_SIZE(HDRP(bp));   //현 블록 사이즈 구하고
     //헤더랑 풋터에 Allocation 0으로
@@ -189,6 +190,7 @@ static void *coalesce(void *bp)
 //     }
 // }
 //
+//실제 블록을 할당하는 함수
 void *mm_malloc(size_t size)
 {
     size_t asize;   //실제 적용할 사이즈
@@ -217,23 +219,24 @@ void *mm_malloc(size_t size)
     return bp;
 }
 
+    
+// static void *find_fit(size_t asize)//codex로 생성
+// {
+//     void *bp;
 
-static void *find_fit(size_t asize)//codex로 생성
-{
-    void *bp;
+//     for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
+//         if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
+//             return bp;
+//     }
 
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
-            return bp;
-    }
-
-    return NULL;
-}
-
+//     return NULL;
+// }
+//해당 free 블록 위치에 할당하기
 static void place(void *bp, size_t asize)   //codex로 생성
 {
     size_t csize = GET_SIZE(HDRP(bp));
 
+    //free 블록이 충분히 남을 경우 남는공간 free블록으로
     if ((csize - asize) >= (2 * DSIZE)) {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
@@ -250,17 +253,25 @@ static void place(void *bp, size_t asize)   //codex로 생성
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
-void *mm_realloc(void *ptr, size_t size)
+void *mm_realloc(void *bp, size_t size)
 {
-    void *oldptr = ptr;
+    void *oldptr = bp;
     void *newptr;
-    size_t copySize;
+    size_t copySize = GET_SIZE(HDRP(oldptr)) - DSIZE;
 
-    newptr = mm_malloc(size);
-    if (newptr == NULL)
-        return NULL;
-    copySize = GET_SIZE(HDRP(oldptr)) - DSIZE;
+    //헤더, 풋터 제외하고 데이터 만큼만 기존 크기 가져옴
     //copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
+    //수정하기
+
+    void *nextbp = NEXT_BLKP(oldptr);
+    //만약 다음 블록이 free이고 블록 크기가 충분하다면
+    if (copySize + size <= GET_SIZE(HDRP(nextbp)) - WSIZE && !GET_ALLOC(HDRP(nextbp))){
+        
+    }
+    //그렇지 않을 경우
+    newptr = mm_malloc(size);   //사이즈만큼 할당
+    if (newptr == NULL) //만약 새로운 포인터가 할당 안될시에
+        return NULL;
     if (size < copySize)
         copySize = size;
     memcpy(newptr, oldptr, copySize);
