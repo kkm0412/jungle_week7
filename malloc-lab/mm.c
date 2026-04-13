@@ -257,9 +257,9 @@ void *mm_realloc(void *bp, size_t size)
 {
     void *oldptr = bp;
     void *newptr;
-    size_t oldSize;
-    size_t asize;
-    size_t copySize;
+    size_t oldSize; //현재블록 사이즈
+    size_t asize;   //실제 할당할 사이즈
+    size_t copySize;    //현재 블록의 payload 사이즈 
     size_t nextSize;
     size_t totalSize;
 
@@ -284,11 +284,11 @@ void *mm_realloc(void *bp, size_t size)
     //수정하기
 
     void *nextbp = NEXT_BLKP(oldptr);
-    //만약 다음 블록이 free이고 블록 크기가 충분하다면
+    //만약 다음 블록이 free이고 블록 크기가 충분할때
     nextSize = GET_SIZE(HDRP(nextbp));
     totalSize = oldSize + nextSize;
     if (asize <= totalSize && !GET_ALLOC(HDRP(nextbp))){
-        //필요한 만큼만 확장하고 남는 공간은 free 블록으로 유지한다.
+        //확장하고 남는 공간은 free 블록으로
         if ((totalSize - asize) >= (2 * DSIZE)) {
             PUT(HDRP(bp), PACK(asize, 1));
             PUT(FTRP(bp), PACK(asize, 1));
