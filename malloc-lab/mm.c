@@ -77,6 +77,9 @@ static char *heap_listp;   //힙의 포인터
 //이전 블록의 풋터 확인해서 이전 블록으로
 #define PREV_BLKP(bp)   ((char *)(bp) - GET_SIZE((char*)(bp)- DSIZE))
 //---추가 끝
+//segregated freelist에서 pred succ으로 이동
+#define PRED(bp)    ((char*)(bp) + WSIZE);
+#define SUCC(bp)    ((char*)(bp) + DSIZE);
 
 //함수 프로토타입 선언
 static void *extend_heap(size_t words);
@@ -84,6 +87,7 @@ static void *coalesce(void *bp);
 static void *find_fit(size_t asize);
 static void place(void *bp, size_t asize);
 
+static char *nfp = NULL;
 /*
  * mm_init - initialize the malloc package.
  */
@@ -100,6 +104,7 @@ int mm_init(void)   //힙 초기화 하는 함수
 
     heap_listp += (2*WSIZE);    //힙 포인터를 프롤로그 풋터로 이동
 
+    nfp = heap_listp;
     if(extend_heap(CHUNKSIZE/WSIZE) == NULL)    
     //워드 갯수만큼 extend_heap에 넣어서 힙 확장
         return -1;
@@ -119,6 +124,8 @@ static void *extend_heap(size_t words)  //힙 자체를 확장하는 함수
     
     //늘린 만큼 free 블록 채우고 에필로그 헤더 추가하기
     PUT(HDRP(bp), PACK(size, 0));
+    //여기에 pred
+    //여기에 succ NULL
     PUT(FTRP(bp), PACK(size, 0));
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
     
@@ -170,6 +177,11 @@ static void *coalesce(void *bp)
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
+    //nextfit용 포인터 조정
+    if((nfp >(char *)(bp)) && (nfp < (char *)NEXT_BLKP(bp))){
+        nfp = bp;
+    }
+
     return bp;
 }
 
@@ -219,18 +231,55 @@ void *mm_malloc(size_t size)
     return bp;
 }
 
-    
-static void *find_fit(size_t asize)//codex로 생성
+//first fit을 nextfit으로
+static void *find_fit(size_t asize)
 {
-    void *bp;
-
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp)) {
-        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
-            return bp;
+    // void *bp;
+    if(nfp == NULL){
+        nfp = heap_listp;
     }
-
+    char *old_nfp = nfp;
+    for (; GET_SIZE(HDRP(nfp)) > 0; nfp = NEXT_BLKP(nfp)) {
+        if (!GET_ALLOC(HDRP(nfp)) && (asize <= GET_SIZE(HDRP(nfp))))
+            return nfp;
+    }
+    for (nfp = heap_listp; nfp < old_nfp; nfp = NEXT_BLKP(nfp)) {
+        if (!GET_ALLOC(HDRP(nfp)) && (asize <= GET_SIZE(HDRP(nfp))))
+            return nfp;
+    }
+    // nfp = heap_listp;
     return NULL;
 }
+
+
+
+// //find_fit을 Segregated free list로
+// static void *find_fit(size_t asize)
+// {
+//     void *bp;
+    
+//     if(asize <=16){
+//         for(bp = heap_listp; bp != NULL; bp = SUCC(bp)){
+
+//         }
+//     }
+//     else if(16 < asize <= 64){
+
+//     }
+//     else if(64 < asize <= 256){
+
+//     }
+//     else if(256 < asize <= 1024){
+
+//     }
+//     else if (1024 < asize <= 4096){
+
+//     }
+//     else{
+
+//     }
+// }
+
 //해당 free 블록 위치에 할당하기
 static void place(void *bp, size_t asize)   //codex로 생성
 {
