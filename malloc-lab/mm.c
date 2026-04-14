@@ -93,6 +93,7 @@ static void insert_free_block(void *bp);
 static void remove_free_block(void *bp);
 
 static void *seg_free_lists[LISTLIMIT];
+static void *seg_free_tails[LISTLIMIT];
 
 /*
  * mm_init - initialize the malloc package.
@@ -112,8 +113,10 @@ int mm_init(void)   //힙 초기화 하는 함수
 
     heap_listp += (2*WSIZE);    //힙 포인터를 프롤로그 풋터로 이동
 
-    for (i = 0; i < LISTLIMIT; i++)
+    for (i = 0; i < LISTLIMIT; i++) {
         seg_free_lists[i] = NULL;
+        seg_free_tails[i] = NULL;
+    }
 
     if(extend_heap(CHUNKSIZE/WSIZE) == NULL)
     //워드 갯수만큼 extend_heap에 넣어서 힙 확장
@@ -136,13 +139,17 @@ static int get_list_index(size_t size)
 static void insert_free_block(void *bp)
 {
     int index = get_list_index(GET_SIZE(HDRP(bp)));
-    void *head = seg_free_lists[index];
+    void *tail = seg_free_tails[index];
 
-    PRED(bp) = NULL;
-    SUCC(bp) = head;
-    if (head != NULL)
-        PRED(head) = bp;
-    seg_free_lists[index] = bp;
+    PRED(bp) = tail;
+    SUCC(bp) = NULL;
+
+    if (tail != NULL)
+        SUCC(tail) = bp;
+    else
+        seg_free_lists[index] = bp;
+
+    seg_free_tails[index] = bp;
 }
 
 static void remove_free_block(void *bp)
@@ -156,6 +163,8 @@ static void remove_free_block(void *bp)
 
     if (SUCC(bp) != NULL)
         PRED(SUCC(bp)) = PRED(bp);
+    else
+        seg_free_tails[index] = PRED(bp);
 }
 
 static void *extend_heap(size_t words)  //힙 자체를 확장하는 함수
@@ -313,11 +322,15 @@ void *mm_realloc(void *bp, size_t size)
     void *oldptr = bp;
     void *newptr;
     void *freebp;
+    void *nextbp;
+    void *prevbp;
     size_t oldSize; //현재블록 사이즈
     size_t asize;   //실제 할당할 사이즈
     size_t copySize;    //현재 블록의 payload 사이즈
     size_t nextSize;
+    size_t prevSize;
     size_t totalSize;
+    size_t extendSize;
 
     if (bp == NULL)
         return mm_malloc(size);
@@ -350,7 +363,7 @@ void *mm_realloc(void *bp, size_t size)
     //copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
     //수정하기
 
-    void *nextbp = NEXT_BLKP(oldptr);
+    nextbp = NEXT_BLKP(oldptr);
     //만약 다음 블록이 free이고 블록 크기가 충분할때
     nextSize = GET_SIZE(HDRP(nextbp));
     totalSize = oldSize + nextSize;
@@ -371,6 +384,42 @@ void *mm_realloc(void *bp, size_t size)
         }
         return oldptr;
     }
+
+    //이전 free 블록만으로 충분하면 앞으로 당겨서 새 heap 확장을 피한다.
+    prevbp = PREV_BLKP(oldptr);
+    if (!GET_ALLOC(HDRP(prevbp))) {
+        prevSize = GET_SIZE(HDRP(prevbp));
+        totalSize = prevSize + oldSize;
+        if (asize <= totalSize) {
+            remove_free_block(prevbp);
+            memmove(prevbp, oldptr, copySize);
+            if ((totalSize - asize) >= MINBLOCKSIZE) {
+                PUT(HDRP(prevbp), PACK(asize, 1));
+                PUT(FTRP(prevbp), PACK(asize, 1));
+                freebp = NEXT_BLKP(prevbp);
+                PUT(HDRP(freebp), PACK(totalSize - asize, 0));
+                PUT(FTRP(freebp), PACK(totalSize - asize, 0));
+                insert_free_block(freebp);
+            }
+            else {
+                PUT(HDRP(prevbp), PACK(totalSize, 1));
+                PUT(FTRP(prevbp), PACK(totalSize, 1));
+            }
+            return prevbp;
+        }
+    }
+
+    //힙 끝 블록이면 새 블록을 만들지 않고 제자리에서 힙을 늘린다.
+    if (nextSize == 0) {
+        extendSize = asize - oldSize;
+        if (mem_sbrk(extendSize) != (void *)-1) {
+            PUT(HDRP(oldptr), PACK(asize, 1));
+            PUT(FTRP(oldptr), PACK(asize, 1));
+            PUT(HDRP(NEXT_BLKP(oldptr)), PACK(0, 1));
+            return oldptr;
+        }
+    }
+
     //그렇지 않을 경우
     newptr = mm_malloc(size);   //사이즈만큼 할당
     if (newptr == NULL) //만약 새로운 포인터가 할당 안될시에
